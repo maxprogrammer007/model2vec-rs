@@ -44,6 +44,22 @@ fn match_local_layout(config_base: &Path, model_base: &Path, config_file: &str) 
     })
 }
 
+fn decode_token_mapping(dtype: Dtype, raw: &[u8]) -> Result<Vec<usize>> {
+    let mapping = match dtype {
+        Dtype::I64 => raw
+            .chunks_exact(8)
+            .map(|b| i64::from_le_bytes(b.try_into().unwrap()) as usize)
+            .collect(),
+        Dtype::I32 => raw
+            .chunks_exact(4)
+            .map(|b| i32::from_le_bytes(b.try_into().unwrap()) as usize)
+            .collect(),
+        other => return Err(anyhow!("unsupported mapping dtype: {:?}", other)),
+    };
+
+    Ok(mapping)
+}
+
 #[cfg(all(feature = "hf-hub", not(feature = "local-only")))]
 fn is_not_found(e: &hf_hub::api::sync::ApiError) -> bool {
     use hf_hub::api::sync::ApiError;
@@ -190,14 +206,7 @@ impl StaticModel {
         };
 
         let token_mapping = match safet.tensor("mapping") {
-            Ok(t) => {
-                let raw = t.data();
-                let v: Vec<usize> = raw
-                    .chunks_exact(4)
-                    .map(|b| i32::from_le_bytes(b.try_into().unwrap()) as usize)
-                    .collect();
-                Some(v)
-            }
+            Ok(t) => Some(decode_token_mapping(t.dtype(), t.data())?),
             Err(_) => None,
         };
 
@@ -423,6 +432,32 @@ impl StaticModel {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::decode_token_mapping;
+    use safetensors::tensor::Dtype;
+
+    #[test]
+    fn decode_token_mapping_supports_i32_and_i64() {
+        let i32_raw = [1i32, 2, 3]
+            .into_iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect::<Vec<_>>();
+        let i64_raw = [4i64, 5, 6]
+            .into_iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect::<Vec<_>>();
+
+        assert_eq!(decode_token_mapping(Dtype::I32, &i32_raw).unwrap(), vec![1, 2, 3]);
+        assert_eq!(decode_token_mapping(Dtype::I64, &i64_raw).unwrap(), vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn decode_token_mapping_rejects_unsupported_dtype() {
+        let err = decode_token_mapping(Dtype::F32, &[0, 0, 0, 0]).unwrap_err();
+        assert!(err.to_string().contains("unsupported mapping dtype"));
+    }
+}
 fn resolve_model_files<P: AsRef<Path>>(
     repo_or_path: P,
     token: Option<&str>,
