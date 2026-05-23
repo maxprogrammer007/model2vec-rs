@@ -432,32 +432,6 @@ impl StaticModel {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::decode_token_mapping;
-    use safetensors::tensor::Dtype;
-
-    #[test]
-    fn decode_token_mapping_supports_i32_and_i64() {
-        let i32_raw = [1i32, 2, 3]
-            .into_iter()
-            .flat_map(|value| value.to_le_bytes())
-            .collect::<Vec<_>>();
-        let i64_raw = [4i64, 5, 6]
-            .into_iter()
-            .flat_map(|value| value.to_le_bytes())
-            .collect::<Vec<_>>();
-
-        assert_eq!(decode_token_mapping(Dtype::I32, &i32_raw).unwrap(), vec![1, 2, 3]);
-        assert_eq!(decode_token_mapping(Dtype::I64, &i64_raw).unwrap(), vec![4, 5, 6]);
-    }
-
-    #[test]
-    fn decode_token_mapping_rejects_unsupported_dtype() {
-        let err = decode_token_mapping(Dtype::F32, &[0, 0, 0, 0]).unwrap_err();
-        assert!(err.to_string().contains("unsupported mapping dtype"));
-    }
-}
 fn resolve_model_files<P: AsRef<Path>>(
     repo_or_path: P,
     token: Option<&str>,
@@ -520,4 +494,31 @@ fn download_model_files(repo_id: &str, token: Option<&str>, subfolder: Option<&s
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_token_mapping;
+    use safetensors::tensor::Dtype;
+
+    #[test]
+    fn decode_token_mapping_supports_i32_and_i64() {
+        let i32_raw = [1i32, 2, 3]
+            .into_iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect::<Vec<_>>();
+        let i64_raw = [4i64, 5, 6]
+            .into_iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect::<Vec<_>>();
+
+        assert_eq!(decode_token_mapping(Dtype::I32, &i32_raw).unwrap(), vec![1, 2, 3]);
+        assert_eq!(decode_token_mapping(Dtype::I64, &i64_raw).unwrap(), vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn decode_token_mapping_rejects_unsupported_dtype() {
+        let err = decode_token_mapping(Dtype::F32, &[0, 0, 0, 0]).unwrap_err();
+        assert!(err.to_string().contains("unsupported mapping dtype"));
+    }
 }
